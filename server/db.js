@@ -184,10 +184,36 @@ export class Database {
     return { user: { email: user.email, name: user.name, role: user.role }, token };
   }
 
+  updateAdminPassword(newPassword) {
+    if (!newPassword || newPassword.trim().length < 4) {
+      throw new Error('Password must be at least 4 characters.');
+    }
+    this.data.adminPasswordHash = hashPassword(newPassword);
+    this.save();
+    return true;
+  }
+
   verifyAdminPassword(password) {
     if (!password) return false;
     const inputHash = hashPassword(password);
-    return inputHash === this.data.adminPasswordHash || password === 'gameopedia@admin2026' || password === 'admin123';
+    return inputHash === this.data.adminPasswordHash || password === process.env.ADMIN_PASSWORD;
+  }
+
+  clearAllSignups() {
+    this.data.sports = this.data.sports.map(s => ({
+      ...s,
+      venue: 'TBA',
+      timing: 'TBA',
+      signups: []
+    }));
+    this.save();
+    return this.data.sports;
+  }
+
+  clearTestUsers() {
+    this.data.users = [];
+    this.save();
+    return this.data.users;
   }
 
   getSports() {

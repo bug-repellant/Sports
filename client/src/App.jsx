@@ -113,18 +113,54 @@ export default function App() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  // Load sports data
-  const loadData = async () => {
+  // Change Admin Password State
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+
+  const handleUpdatePassword = async (e) => {
+    e.preventDefault();
+    if (!newAdminPassword || newAdminPassword.length < 4) {
+      showToastMsg('Password must be at least 4 characters', 'error');
+      return;
+    }
+    setIsUpdatingPassword(true);
     try {
-      const res = await fetch('/api/sports');
+      const res = await fetch('/api/admin/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPassword: newAdminPassword, adminToken })
+      });
       const data = await res.json();
-      setSports(data.sports || []);
-      setWeekInfo(data.weekInfo || null);
-      setStats(data.stats || null);
-    } catch (err) {
-      console.error('Error fetching sports:', err);
+      if (data.success) {
+        setNewAdminPassword('');
+        showToastMsg('Admin password updated successfully!', 'success');
+      } else {
+        showToastMsg(data.error || 'Failed to update password', 'error');
+      }
+    } catch {
+      showToastMsg('Network error', 'error');
     } finally {
-      setLoading(false);
+      setIsUpdatingPassword(false);
+    }
+  };
+
+  const handleResetAllData = async () => {
+    if (!window.confirm('Are you sure you want to clear all test signups and reset to a clean slate?')) {
+      return;
+    }
+    try {
+      const res = await fetch('/api/admin/reset-signups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminToken })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToastMsg('All test signups cleared! Roster is 100% clean.', 'success');
+        loadData();
+      }
+    } catch {
+      showToastMsg('Failed to clear data', 'error');
     }
   };
 
@@ -1113,6 +1149,57 @@ export default function App() {
                 </button>
               </div>
             </form>
+
+            {/* Admin Security & Data Reset Controls */}
+            <div className="pt-4 border-t border-white/10 grid grid-cols-1 md:grid-cols-2 gap-4">
+              
+              {/* Change Admin Password */}
+              <form onSubmit={handleUpdatePassword} className="p-4 rounded-2xl bg-slate-950/60 border border-white/5 space-y-2.5">
+                <label className="text-[11px] font-bold text-slate-300 block flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Update Admin Master Password</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="password"
+                    required
+                    value={newAdminPassword}
+                    onChange={(e) => setNewAdminPassword(e.target.value)}
+                    placeholder="Enter new admin password"
+                    className="flex-1 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-amber-400"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isUpdatingPassword || !newAdminPassword}
+                    className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs transition-all disabled:opacity-50"
+                  >
+                    {isUpdatingPassword ? 'Saving...' : 'Update'}
+                  </button>
+                </div>
+              </form>
+
+              {/* Reset Data & Start Clean */}
+              <div className="p-4 rounded-2xl bg-slate-950/60 border border-rose-500/20 space-y-2 flex flex-col justify-between">
+                <div>
+                  <span className="text-[11px] font-bold text-rose-300 block flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Reset All Signups (Clean Slate)</span>
+                  </span>
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    Wipes all test opt-ins and resets all 7 sports to 0 signups ready for launch.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleResetAllData}
+                  className="w-full py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500 text-rose-200 hover:text-white border border-rose-500/40 font-bold text-xs transition-all"
+                >
+                  🧹 Clear Test Signups
+                </button>
+              </div>
+
+            </div>
+
           </div>
         )}
 

@@ -281,6 +281,52 @@ app.post('/api/admin/integrations/config', (req, res) => {
   });
 });
 
+// 12. Admin Change Password
+app.post('/api/admin/change-password', (req, res) => {
+  try {
+    const { newPassword, adminToken } = req.body;
+    if (!adminToken) {
+      return res.status(403).json({ success: false, error: 'Admin authorization required.' });
+    }
+    db.updateAdminPassword(newPassword);
+    res.json({ success: true, message: 'Admin password updated successfully!' });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// 13. Admin Clear All Signups & Reset
+app.post('/api/admin/reset-signups', (req, res) => {
+  try {
+    const { adminToken } = req.body;
+    if (!adminToken) {
+      return res.status(403).json({ success: false, error: 'Admin authorization required.' });
+    }
+    db.clearAllSignups();
+    broadcast('SPORTS_UPDATED', {
+      sports: db.getSports(),
+      stats: db.getStats()
+    });
+    res.json({ success: true, sports: db.getSports(), stats: db.getStats() });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// 14. Admin Clear Test Users
+app.post('/api/admin/clear-users', (req, res) => {
+  try {
+    const { adminToken } = req.body;
+    if (!adminToken) {
+      return res.status(403).json({ success: false, error: 'Admin authorization required.' });
+    }
+    db.clearTestUsers();
+    res.json({ success: true, message: 'Test users cleared successfully!' });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
 // 12. Get Apps Script Template (Admin Only)
 app.get('/api/admin/sheets/template', (req, res) => {
   res.json({ code: integrations.getAppsScriptCode() });
