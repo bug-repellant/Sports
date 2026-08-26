@@ -50,7 +50,7 @@ Use the top-right persona switcher to test the application instantly:
 
 | Name | Email | Department | Role |
 |---|---|---|---|
-| **Aravind Swaminathan** | `aravind@gameopedia.com` | Engineering | 🏆 Sports Admin |
+| **Aravind S** | `aravind@gameopedia.com` | Ops | 🏆 Sports Admin |
 | **Sarah Jenkins** | `sarah.jenkins@gameopedia.com` | Game Indexing & Research | ⚡ Active Player |
 | **Marcus Chen** | `marcus.chen@gameopedia.com` | Game Engine Architecture | ⚡ Active Player |
 | **Priya Sharma** | `priya.sharma@gameopedia.com` | Product Strategy | ⚡ Active Player |
