@@ -10,13 +10,13 @@ export class IntegrationService {
     const timestamp = new Date().toISOString();
     const logEntry = { id: 'sync_' + Date.now(), event, sport: data.sportName || 'N/A', name: data.userName || 'N/A', email: data.userEmail || 'N/A', venue: data.venue || 'TBA', timing: data.timing || 'TBA', timestamp, status: 'PENDING', message: '' };
     if (!this.sheetWebhookUrl) { logEntry.status = 'NOT_CONFIGURED'; logEntry.message = 'Google Sheets webhook URL is not configured.'; this.syncLogs.push(logEntry); return logEntry; }
-    const payload = JSON.stringify({ event, timestamp, sport: data.sportName, name: data.userName, email: data.userEmail, venue: data.venue, timing: data.timing });
+    const payload = JSON.stringify({ action: event === 'CANCEL' ? 'remove' : 'upsert', timestamp, sport: data.sportName, name: data.userName, email: data.userEmail, venue: data.venue, timing: data.timing });
     try {
       const response = await fetch(this.sheetWebhookUrl, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'application/json' }, body: payload, signal: AbortSignal.timeout(15000) });
       const responseText = await response.text(); let parsed = null; try { parsed = JSON.parse(responseText); } catch {}
       if (!response.ok) throw new Error(`HTTP ${response.status}: ${responseText.slice(0, 300)}`);
       if (parsed?.status === 'ERROR') throw new Error(parsed.message || 'Apps Script returned an error.');
-      logEntry.status = 'SUCCESS'; logEntry.message = parsed?.status || 'Synced to Google Sheet';
+      logEntry.status = 'SUCCESS'; logEntry.message = parsed?.status || 'Google Sheet updated';
     } catch (err) { logEntry.status = 'FAILED'; logEntry.message = err?.message || String(err); }
     this.syncLogs.push(logEntry); return logEntry;
   }
@@ -43,6 +43,6 @@ export class IntegrationService {
     const rows=[['Sport','Day','Venue','Timing','Player Name','Player Email','Signed Up At']]; for(const sport of sports){if(!sport.signups?.length)rows.push([sport.name,sport.defaultDay||'',sport.venue||'TBA',sport.timing||'TBA','(None)','','']);else for(const p of sport.signups)rows.push([sport.name,sport.defaultDay||'',sport.venue||'TBA',sport.timing||'TBA',p.name,p.email,p.signedUpAt||'']);} return rows.map(r=>r.join(',')).join('\n');
   }
 
-  getAppsScriptCode() { return `function doPost(e) {\n  try {\n    var ss = SpreadsheetApp.getActiveSpreadsheet();\n    var sheet = ss.getSheetByName('Signups') || ss.insertSheet('Signups');\n    var p = JSON.parse(e.postData.contents);\n    if (sheet.getLastRow() === 0) sheet.appendRow(['Timestamp','Event','Sport','Player Name','Player Email','Venue','Timing']);\n    sheet.appendRow([new Date(), p.event || '', p.sport || '', p.name || '', p.email || '', p.venue || 'TBA', p.timing || 'TBA']);\n    return ContentService.createTextOutput(JSON.stringify({status:'SUCCESS'})).setMimeType(ContentService.MimeType.JSON);\n  } catch (err) {\n    return ContentService.createTextOutput(JSON.stringify({status:'ERROR',message:String(err)})).setMimeType(ContentService.MimeType.JSON);\n  }\n}`; }
+  getAppsScriptCode() { return `function doPost(e) {\n  try {\n    var ss = SpreadsheetApp.getActiveSpreadsheet();\n    var sheet = ss.getSheetByName('Signups') || ss.insertSheet('Signups');\n    var p = JSON.parse(e.postData.contents);\n    var headers = ['Sport','Player Name','Player Email','Venue','Timing','Updated At'];\n    if (sheet.getLastRow() === 0) sheet.appendRow(headers);\n    var values = sheet.getDataRange().getValues();\n    var email = String(p.email || '').toLowerCase().trim();\n    var sport = String(p.sport || '').trim();\n    var row = -1;\n    for (var i = 1; i < values.length; i++) {\n      if (String(values[i][0]).trim() === sport && String(values[i][2]).toLowerCase().trim() === email) { row = i + 1; break; }\n    }\n    if (p.action === 'remove') {\n      if (row > 0) sheet.deleteRow(row);\n      return ContentService.createTextOutput(JSON.stringify({status:'SUCCESS', action:'removed'})).setMimeType(ContentService.MimeType.JSON);\n    }\n    var record = [sport, p.name || '', p.email || '', p.venue || 'TBA', p.timing || 'TBA', new Date()];\n    if (row > 0) sheet.getRange(row, 1, 1, record.length).setValues([record]);\n    else sheet.appendRow(record);\n    return ContentService.createTextOutput(JSON.stringify({status:'SUCCESS', action: row > 0 ? 'updated' : 'added'})).setMimeType(ContentService.MimeType.JSON);\n  } catch (err) {\n    return ContentService.createTextOutput(JSON.stringify({status:'ERROR',message:String(err)})).setMimeType(ContentService.MimeType.JSON);\n  }\n}`; }
 }
 export const integrations = new IntegrationService();
