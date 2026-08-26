@@ -23,7 +23,6 @@ export class Database {
         this.data = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
         if (!this.data.adminPasswordHash) this.data.adminPasswordHash = hashPassword('gameopedia@admin2026');
         if (!this.data.users || this.data.users.length === 0) this.seedInitialUsers();
-        // A deployment may contain an empty DB snapshot. Never allow that to hide the default sports.
         if (!Array.isArray(this.data.sports) || this.data.sports.length === 0 || this.data.weekId !== nextWeek.weekId) {
           this.resetForWeek(nextWeek.weekId);
         } else {
@@ -64,8 +63,31 @@ export class Database {
   clearTestUsers() { this.data.users = []; this.save(); return this.data.users; }
   getSports() { return this.data.sports; }
   getSportById(id) { return this.data.sports.find(s => s.id === id); }
-  signup(sportId, { name, email }) { const sport = this.getSportById(sportId); if (!sport) throw new Error('Sport not found'); const cleanEmail = email.trim().toLowerCase(); const cleanName = (name || cleanEmail.split('@')[0]).trim(); const existing = sport.signups.find(p => p.email.toLowerCase() === cleanEmail); if (existing) return { sport, isNew: false }; sport.signups.push({ name: cleanName, email: cleanEmail, signedUpAt: new Date().toISOString() }); this.save(); integrations.dispatchSheetSync('SIGNUP', { sportName: sport.name, userName: cleanName, userEmail: cleanEmail, venue: sport.venue, timing: sport.timing, totalSignups: sport.signups.length }); return { sport, isNew: true, signup: sport.signups[sport.signups.length - 1] }; }
-  cancelSignup(sportId, email) { const sport = this.getSportById(sportId); if (!sport) throw new Error('Sport not found'); const cleanEmail = email.trim().toLowerCase(); const idx = sport.signups.findIndex(p => p.email.toLowerCase() === cleanEmail); if (idx === -1) return { sport, removed: false }; const removed = sport.signups[idx]; sport.signups.splice(idx, 1); this.save(); integrations.dispatchSheetSync('CANCEL', { sportName: sport.name, userName: removed.name, userEmail: cleanEmail, venue: sport.venue, timing: sport.timing, totalSignups: sport.signups.length }); return { sport, removed: true }; }
+
+  signup(sportId, { name, email }) {
+    const sport = this.getSportById(sportId);
+    if (!sport) throw new Error('Sport not found');
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = (name || cleanEmail.split('@')[0]).trim();
+    const existing = sport.signups.find(p => p.email.toLowerCase() === cleanEmail);
+    if (existing) return { sport, isNew: false };
+    sport.signups.push({ name: cleanName, email: cleanEmail, signedUpAt: new Date().toISOString() });
+    this.save();
+    return { sport, isNew: true, signup: sport.signups[sport.signups.length - 1] };
+  }
+
+  cancelSignup(sportId, email) {
+    const sport = this.getSportById(sportId);
+    if (!sport) throw new Error('Sport not found');
+    const cleanEmail = email.trim().toLowerCase();
+    const idx = sport.signups.findIndex(p => p.email.toLowerCase() === cleanEmail);
+    if (idx === -1) return { sport, removed: false };
+    const removed = sport.signups[idx];
+    sport.signups.splice(idx, 1);
+    this.save();
+    return { sport, removed: true, removedSignup: removed };
+  }
+
   updateVenueTiming(sportId, { venue, timing }) { const sport = this.getSportById(sportId); if (!sport) throw new Error('Sport not found'); if (venue !== undefined) sport.venue = venue.trim() || 'TBA'; if (timing !== undefined) sport.timing = timing.trim() || 'TBA'; this.save(); return sport; }
   setSheetWebhookUrl(url) { this.data.sheetWebhookUrl = (url || '').trim(); integrations.setSheetWebhookUrl(this.data.sheetWebhookUrl); this.save(); }
   getSheetWebhookUrl() { return this.data.sheetWebhookUrl; }
