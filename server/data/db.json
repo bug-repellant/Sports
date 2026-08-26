@@ -1,7 +1,7 @@
 {
-  "weekId": "2026-W36",
+  "weekId": "",
   "adminPasswordHash": "2bb80e779e7e633d59f139d18610f8917471be2c0190f63e93c20d42d33d6170",
-  "sheetWebhookUrl": "https://script.google.com/a/macros/gameopedia.com/s/AKfycbwJ7xL42MIMIl5YCSqvt8iIrxSCH0XW7ZK5NYlbiRnA4mKXXFFdctNeqzAJeJAJMh3AGA/exec",
+  "sheetWebhookUrl": "https://script.google.com/a/macros/gameopedia.com/s/AKfycbz4CfQq-zDvlJNMQiXMIagD2i9rDPOPLUyGq-yb9TCwvl1GayV9TPxP_A2j2ghclwRlRQ/exec",
   "chatWebhookUrl": "",
   "users": [],
   "sports": []
