@@ -56,6 +56,8 @@ const repairLoadDataPlugin = {
             console.error('Google Workspace sign-in failed:', err);
             setCurrentUser(null);
             setUserToken('');
+            localStorage.removeItem('gameopedia_user_profile');
+            localStorage.removeItem('gameopedia_user_token');
             showToastMsg(err.message || 'Google Workspace sign-in failed', 'error');
           }
         }
@@ -81,31 +83,50 @@ const repairLoadDataPlugin = {
 
 `
 
+    const restoreSession = `  const restoreSession = () => {
+    try {
+      const savedUser = localStorage.getItem('gameopedia_user_profile');
+      const savedToken = localStorage.getItem('gameopedia_user_token');
+      if (!savedUser || !savedToken) return false;
+      const user = JSON.parse(savedUser);
+      if (!user?.email || !user.email.toLowerCase().endsWith('@gameopedia.com')) {
+        localStorage.removeItem('gameopedia_user_profile');
+        localStorage.removeItem('gameopedia_user_token');
+        return false;
+      }
+      setCurrentUser(user);
+      setUserToken(savedToken);
+      return true;
+    } catch {
+      localStorage.removeItem('gameopedia_user_profile');
+      localStorage.removeItem('gameopedia_user_token');
+      return false;
+    }
+  };
+
+`
+
     let transformed = code
 
-    // Remove hard-coded demo identities and password-based browser identity.
+    // No demo identities or password fallback.
     transformed = transformed.replace(/const DEMO_PROFILES = \[[\s\S]*?\];\n\n/, "const DEMO_PROFILES = [];\n\n")
     transformed = transformed.replace(/  const \[currentUser, setCurrentUser\] = useState\(\(\) => \{[\s\S]*?\n  \}\);/, "  const [currentUser, setCurrentUser] = useState(null);")
     transformed = transformed.replace(/  const \[userToken, setUserToken\] = useState\(\(\) => \{[\s\S]*?\n  \}\);/, "  const [userToken, setUserToken] = useState('');")
-
-    // Disable the old account-switcher entry point completely.
     transformed = transformed.replace("onClick={() => setShowSwitchModal(true)}", "onClick={() => {}}")
 
-    // Replace the old auto-fallback block with real Google Workspace detection.
+    // Restore the cached session first. Only invoke Google when there is no
+    // usable cached session, avoiding a sign-in prompt on normal page loads.
     transformed = transformed.replace(
       /  useEffect\(\(\) => \{\n    loadData\(\);\n\n    if \(!currentUser\) \{[\s\S]*?\n    \}\n\n    const protocol =/,
-      "  useEffect(() => {\n    loadData(true);\n    initGoogleAuth();\n\n    const protocol ="
+      "  useEffect(() => {\n    loadData(true);\n    const hasCachedSession = restoreSession();\n    if (!hasCachedSession) initGoogleAuth();\n\n    const protocol ="
     )
 
-    // Keep the existing loadData calls safe, but make signup/cancel immediate.
     if (!code.includes('const loadData = async () =>')) {
-      transformed = transformed.replace(marker, loadData + googleAuth + marker)
+      transformed = transformed.replace(marker, loadData + googleAuth + restoreSession + marker)
     } else {
-      transformed = transformed.replace(marker, googleAuth + marker)
+      transformed = transformed.replace(marker, googleAuth + restoreSession + marker)
     }
 
-    // The old switch modal can never be opened; remove its rendered block so
-    // there is no visible profile picker or alternate-email login UI.
     transformed = transformed.replace(
       /\n      \{showSwitchModal && \([\s\S]*?\n      \)\}\n\n      \{\/\* 🛡️ ADMIN PASSWORD MODAL \*\/\}/,
       "\n      {/* 🛡️ ADMIN PASSWORD MODAL */}"
