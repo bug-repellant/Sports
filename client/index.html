@@ -12,6 +12,13 @@
   </head>
   <body class="bg-[#090d16] text-slate-100 antialiased selection:bg-emerald-500 selection:text-slate-950">
     <div id="root"></div>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sheets-sync-sw.js', { scope: '/' }).catch(() => {});
+        });
+      }
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
