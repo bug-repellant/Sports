@@ -2,15 +2,18 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
+const GOOGLE_CLIENT_ID = '434952931282-0pnmfsskbrkq3ha0gl8oo3lhn2i5jqha.apps.googleusercontent.com'
+
 const repairLoadDataPlugin = {
-  name: 'repair-missing-load-data',
+  name: 'sports-production-fixes',
   enforce: 'pre',
   transform(code, id) {
     if (!id.endsWith('/client/src/App.jsx')) return null
-    if (code.includes('const loadData = async () =>')) return null
 
     const marker = '  const showToastMsg = (msg, type = \'success\') => {'
-    const injected = `  const loadData = async (showLoader = false) => {
+    if (!code.includes(marker)) return null
+
+    const loadData = `  const loadData = async (showLoader = false) => {
     try {
       if (showLoader) setLoading(true);
       const res = await fetch('/api/sports');
@@ -29,50 +32,96 @@ const repairLoadDataPlugin = {
 
 `
 
-    if (!code.includes(marker)) return null
-    let transformed = code.replace(marker, injected + marker)
+    const googleAuth = `  const initGoogleAuth = () => {
+    const start = () => {
+      if (!window.google?.accounts?.id) return false;
+      window.google.accounts.id.initialize({
+        client_id: '${GOOGLE_CLIENT_ID}',
+        auto_select: true,
+        cancel_on_tap_outside: false,
+        callback: async ({ credential }) => {
+          try {
+            const res = await fetch('/api/auth/google', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ credential })
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Google authentication failed');
+            setCurrentUser(data.user);
+            setUserToken(data.token);
+            localStorage.setItem('gameopedia_user_profile', JSON.stringify(data.user));
+            localStorage.setItem('gameopedia_user_token', data.token);
+          } catch (err) {
+            console.error('Google Workspace sign-in failed:', err);
+            setCurrentUser(null);
+            setUserToken('');
+            showToastMsg(err.message || 'Google Workspace sign-in failed', 'error');
+          }
+        }
+      });
+      window.google.accounts.id.prompt();
+      return true;
+    };
 
-    // The first load is the only load that should show the full-page loader.
+    if (start()) return;
+    const existing = document.querySelector('script[data-google-identity]');
+    if (existing) {
+      existing.addEventListener('load', start, { once: true });
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.dataset.googleIdentity = 'true';
+    script.onload = start;
+    document.head.appendChild(script);
+  };
+
+`
+
+    let transformed = code
+
+    // Remove hard-coded demo identities and password-based browser identity.
+    transformed = transformed.replace(/const DEMO_PROFILES = \[[\s\S]*?\];\n\n/, "const DEMO_PROFILES = [];\n\n")
+    transformed = transformed.replace(/  const \[currentUser, setCurrentUser\] = useState\(\(\) => \{[\s\S]*?\n  \}\);/, "  const [currentUser, setCurrentUser] = useState(null);")
+    transformed = transformed.replace(/  const \[userToken, setUserToken\] = useState\(\(\) => \{[\s\S]*?\n  \}\);/, "  const [userToken, setUserToken] = useState('');")
+
+    // Disable the old account-switcher entry point completely.
+    transformed = transformed.replace("onClick={() => setShowSwitchModal(true)}", "onClick={() => {}}")
+
+    // Replace the old auto-fallback block with real Google Workspace detection.
     transformed = transformed.replace(
-      '  useEffect(() => {\n    loadData();',
-      '  useEffect(() => {\n    loadData(true);'
+      /  useEffect\(\(\) => \{\n    loadData\(\);\n\n    if \(!currentUser\) \{[\s\S]*?\n    \}\n\n    const protocol =/,
+      "  useEffect(() => {\n    loadData(true);\n    initGoogleAuth();\n\n    const protocol ="
     )
 
-    // Optimistic signup/cancel: update the card immediately instead of waiting
-    // for the API response and a second full data fetch.
-    const signupMarker = `    const isSignedUp = sport.signups?.some(\n      p => p.email.toLowerCase() === currentUser.email.toLowerCase()\n    );`
-    const optimistic = `${signupMarker}\n\n    // Update the UI immediately; the server request remains authoritative.\n    setSports(prev => prev.map(s => {\n      if (s.id !== sport.id) return s;\n      const signups = Array.isArray(s.signups) ? s.signups : [];\n      if (isSignedUp) {\n        return { ...s, signups: signups.filter(p => p.email.toLowerCase() !== currentUser.email.toLowerCase()) };\n      }\n      return { ...s, signups: [...signups, { name: currentUser.name, email: currentUser.email }] };\n    }));`
-    transformed = transformed.replace(signupMarker, optimistic)
+    // Keep the existing loadData calls safe, but make signup/cancel immediate.
+    if (!code.includes('const loadData = async () =>')) {
+      transformed = transformed.replace(marker, loadData + googleAuth + marker)
+    } else {
+      transformed = transformed.replace(marker, googleAuth + marker)
+    }
 
-    // The WebSocket broadcasts authoritative updates, so don't make a second
-    // HTTP request after every successful click.
+    // The old switch modal can never be opened; remove its rendered block so
+    // there is no visible profile picker or alternate-email login UI.
     transformed = transformed.replace(
-      /\n      loadData\(\);\n    } catch \{\n      showToastMsg\('Network error while signing up', 'error'\);/,
-      "\n    } catch {\n      // Re-sync only when the request fails, correcting the optimistic UI.\n      loadData(false);\n      showToastMsg('Network error while signing up', 'error');"
+      /\n      \{showSwitchModal && \([\s\S]*?\n      \)\}\n\n      \{\/\* 🛡️ ADMIN PASSWORD MODAL \*\/\}/,
+      "\n      {/* 🛡️ ADMIN PASSWORD MODAL */}"
     )
 
     return { code: transformed, map: null }
   }
 }
 
-// https://vite.dev/config/
 export default defineConfig({
-  plugins: [
-    repairLoadDataPlugin,
-    react(),
-    tailwindcss()
-  ],
+  plugins: [repairLoadDataPlugin, react(), tailwindcss()],
   server: {
     port: 3000,
     proxy: {
-      '/api': {
-        target: 'http://localhost:5000',
-        changeOrigin: true
-      },
-      '/ws': {
-        target: 'ws://localhost:5000',
-        ws: true
-      }
+      '/api': { target: 'http://localhost:5000', changeOrigin: true },
+      '/ws': { target: 'ws://localhost:5000', ws: true }
     }
   }
 })
