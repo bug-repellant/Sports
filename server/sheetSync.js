@@ -30,6 +30,9 @@ export class IntegrationService {
   }
 
   // 1. Dispatch Signup / Cancel to Google Sheets
+  // Google Apps Script web apps can return an HTTP redirect before the actual
+  // googleusercontent endpoint. We explicitly follow that redirect with POST
+  // so the event payload is not lost or converted into a GET request.
   async dispatchSheetSync(event, data) {
     const timestamp = new Date().toISOString();
     const logEntry = {
@@ -52,30 +55,57 @@ export class IntegrationService {
       return logEntry;
     }
 
-    try {
-      const response = await fetch(this.sheetWebhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          event,
-          timestamp,
-          sport: data.sportName,
-          name: data.userName,
-          email: data.userEmail,
-          venue: data.venue,
-          timing: data.timing,
-          totalSignups: data.totalSignups
-        })
-      });
+    const payload = JSON.stringify({
+      event,
+      timestamp,
+      sport: data.sportName,
+      name: data.userName,
+      email: data.userEmail,
+      venue: data.venue,
+      timing: data.timing,
+      totalSignups: data.totalSignups
+    });
 
+    const postPayload = async (url) => {
+      return fetch(url, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: payload,
+        signal: AbortSignal.timeout(10000)
+      });
+    };
+
+    try {
+      let response = await postPayload(this.sheetWebhookUrl);
+
+      // Apps Script commonly responds with 301/302/303 before reaching the
+      // final googleusercontent URL. Re-send the original POST payload there.
+      if (response.status >= 300 && response.status < 400) {
+        const redirectUrl = response.headers.get('location');
+        if (!redirectUrl) {
+          throw new Error(`Webhook redirected with HTTP ${response.status}, but no Location header was returned.`);
+        }
+        response = await postPayload(redirectUrl);
+      }
+
+      const responseText = await response.text();
       logEntry.status = response.ok ? 'SUCCESS' : 'ERROR';
-      logEntry.message = response.ok ? 'Synced to Google Sheet' : `HTTP ${response.status}`;
+      logEntry.message = response.ok
+        ? `Synced to Google Sheet${responseText ? ` (${responseText.slice(0, 120)})` : ''}`
+        : `HTTP ${response.status}: ${responseText.slice(0, 200)}`;
     } catch (err) {
       logEntry.status = 'FAILED';
-      logEntry.message = err.message;
+      logEntry.message = err?.name === 'TimeoutError'
+        ? 'Google Sheets webhook timed out after 10 seconds.'
+        : (err?.message || String(err));
     }
 
     this.syncLogs.push(logEntry);
+    console.log(`[Google Sheets] ${event} ${data.userEmail} -> ${logEntry.status}: ${logEntry.message}`);
     return logEntry;
   }
 
@@ -85,7 +115,7 @@ export class IntegrationService {
       throw new Error('Google Chat Webhook URL is not configured in Admin settings.');
     }
 
-    const attendeeNames = sport.signups && sport.signups.length > 0 
+    const attendeeNames = sport.signups && sport.signups.length > 0
       ? sport.signups.map((s, idx) => `${idx + 1}. ${s.name} (${s.email})`).join('\n')
       : 'None yet';
 
@@ -133,7 +163,7 @@ export class IntegrationService {
     const endICS = `${year}${pad(month)}${pad(day)}T${pad(endH)}${pad(endM)}00`;
     const nowICS = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
 
-    const attendeeLines = (sport.signups || []).map(p => 
+    const attendeeLines = (sport.signups || []).map(p =>
       `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;CN=${p.name}:mailto:${p.email}`
     ).join('\r\n');
 
@@ -175,8 +205,7 @@ export class IntegrationService {
     const title = encodeURIComponent(`Gameopedia ${sport.name} (${sport.defaultDay})`);
     const details = encodeURIComponent(`Gameopedia Office Sports Session\nSport: ${sport.name}\nVenue: ${sport.venue || 'TBA'}\nTiming: ${sport.timing || 'TBA'}\n\nConfirmed Attendees:\n` + (sport.signups || []).map(p => `- ${p.name} (${p.email})`).join('\n'));
     const location = encodeURIComponent(sport.venue || 'TBA');
-    
-    // Add all registered player emails to guest list (&add=email1,email2...)
+
     const attendeeEmails = (sport.signups || []).map(p => p.email).join(',');
     const addParam = attendeeEmails ? `&add=${encodeURIComponent(attendeeEmails)}` : '';
 
