@@ -1,0 +1,10 @@
+cd C:\Users\aravind\.gemini\antigravity\scratch\gameopedia-sports-signup
+
+# 1. Rename branch to main
+git branch -M main
+
+# 2. Add your GitHub repository link (replace YOUR_USERNAME with your GitHub username)
+git remote add origin https://github.com/YOUR_USERNAME/gameopedia-sports.git
+
+# 3. Push the code
+git push -u origin main
