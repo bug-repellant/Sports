@@ -9,11 +9,10 @@ const repairLoadDataPlugin = {
     if (!id.endsWith('/client/src/App.jsx')) return null
     if (code.includes('const loadData = async () =>')) return null
 
-    const marker = 'export default function App() {'
-    const injected = `export default function App() {
-  const loadData = async () => {
+    const marker = '  const showToastMsg = (msg, type = \'success\') => {'
+    const injected = `  const loadData = async (showLoader = false) => {
     try {
-      setLoading(true);
+      if (showLoader) setLoading(true);
       const res = await fetch('/api/sports');
       if (!res.ok) throw new Error(\`Failed to load sports: \${res.status}\`);
       const data = await res.json();
@@ -24,12 +23,14 @@ const repairLoadDataPlugin = {
       console.error('Failed to load sports data:', err);
       showToastMsg('Failed to load sports data', 'error');
     } finally {
-      setLoading(false);
+      if (showLoader) setLoading(false);
     }
-  };`
+  };
+
+`
 
     if (!code.includes(marker)) return null
-    return { code: code.replace(marker, injected), map: null }
+    return { code: code.replace(marker, injected + marker), map: null }
   }
 }
 
