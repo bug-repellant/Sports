@@ -1,0 +1,67 @@
+name: Fix missing loadData
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Add loadData function
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('client/src/App.jsx')
+          s = p.read_text()
+
+          if 'const loadData = async () =>' in s:
+              print('loadData already exists; nothing to do.')
+              raise SystemExit(0)
+
+          marker = "  const showToastMsg = (msg, type = 'success') => {"
+          function = '''  const loadData = async () => {
+            try {
+              setLoading(true);
+              const res = await fetch('/api/sports');
+
+              if (!res.ok) {
+                throw new Error(`Failed to load sports: ${res.status}`);
+              }
+
+              const data = await res.json();
+              setSports(data.sports || []);
+              setWeekInfo(data.weekInfo || null);
+              setStats(data.stats || null);
+            } catch (err) {
+              console.error('Failed to load sports data:', err);
+              showToastMsg('Failed to load sports data', 'error');
+            } finally {
+              setLoading(false);
+            }
+          };
+
+'''
+
+          if marker not in s:
+              raise SystemExit('Could not find insertion point in App.jsx')
+
+          p.write_text(s.replace(marker, function + marker, 1))
+          print('loadData added successfully.')
+          PY
+
+      - name: Commit fix and remove temporary workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/App.jsx .github/workflows/fix-loaddata.yml
+          git rm .github/workflows/fix-loaddata.yml
+          git commit -m "Fix undefined loadData in sports dashboard"
+          git push
