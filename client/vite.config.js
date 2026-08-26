@@ -9,7 +9,6 @@ const repairLoadDataPlugin = {
   enforce: 'pre',
   transform(code, id) {
     if (!id.endsWith('/client/src/App.jsx')) return null
-
     const marker = '  const showToastMsg = (msg, type = \'success\') => {'
     if (!code.includes(marker)) return null
 
@@ -26,19 +25,13 @@ const repairLoadDataPlugin = {
           setLoading(false);
         } catch {}
       }
-
       const res = await fetch('/api/sports', { cache: 'no-store' });
       if (!res.ok) throw new Error(\`Failed to load sports: \${res.status}\`);
       const data = await res.json();
       setSports(data.sports || []);
       setWeekInfo(data.weekInfo || null);
       setStats(data.stats || null);
-      localStorage.setItem('gameopedia_sports_cache_v3', JSON.stringify({
-        sports: data.sports || [],
-        weekInfo: data.weekInfo || null,
-        stats: data.stats || null,
-        cachedAt: Date.now()
-      }));
+      localStorage.setItem('gameopedia_sports_cache_v3', JSON.stringify({ sports: data.sports || [], weekInfo: data.weekInfo || null, stats: data.stats || null, cachedAt: Date.now() }));
     } catch (err) {
       console.error('Failed to load sports data:', err);
       if (!sports.length) showToastMsg('Failed to load sports data', 'error');
@@ -48,45 +41,31 @@ const repairLoadDataPlugin = {
   };
 
 `
-
     const googleAuth = `  const initGoogleAuth = () => {
     const start = () => {
       if (!window.google?.accounts?.id) return false;
       window.google.accounts.id.initialize({
-        client_id: '${GOOGLE_CLIENT_ID}',
-        auto_select: true,
-        cancel_on_tap_outside: false,
+        client_id: '${GOOGLE_CLIENT_ID}', auto_select: true, cancel_on_tap_outside: false,
         callback: async ({ credential }) => {
           try {
-            const res = await fetch('/api/auth/google', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ credential })
-            });
+            const res = await fetch('/api/auth/google', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credential }) });
             const data = await res.json();
             if (!data.success) throw new Error(data.error || 'Google authentication failed');
             setCurrentUser(data.user); setUserToken(data.token);
             localStorage.setItem('gameopedia_user_profile', JSON.stringify(data.user));
             localStorage.setItem('gameopedia_user_token', data.token);
-          } catch (err) {
-            console.error('Google Workspace sign-in failed:', err);
-            setCurrentUser(null); setUserToken('');
-            showToastMsg(err.message || 'Google Workspace sign-in failed', 'error');
-          }
+          } catch (err) { console.error('Google Workspace sign-in failed:', err); setCurrentUser(null); setUserToken(''); showToastMsg(err.message || 'Google Workspace sign-in failed', 'error'); }
         }
       });
-      window.google.accounts.id.prompt();
-      return true;
+      window.google.accounts.id.prompt(); return true;
     };
     if (start()) return;
     const existing = document.querySelector('script[data-google-identity]');
     if (existing) { existing.addEventListener('load', start, { once: true }); return; }
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client'; script.async = true; script.defer = true;
-    script.dataset.googleIdentity = 'true'; script.onload = start; document.head.appendChild(script);
+    const script = document.createElement('script'); script.src = 'https://accounts.google.com/gsi/client'; script.async = true; script.defer = true; script.dataset.googleIdentity = 'true'; script.onload = start; document.head.appendChild(script);
   };
 
 `
-
     let transformed = code
     transformed = transformed.replace(/const DEMO_PROFILES = \[[\s\S]*?\];\n\n/, 'const DEMO_PROFILES = [];\n\n')
     transformed = transformed.replace(/  const \[currentUser, setCurrentUser\] = useState\(\(\) => \{[\s\S]*?\n  \}\);/, "  const [currentUser, setCurrentUser] = useState(() => { try { const s = localStorage.getItem('gameopedia_user_profile'); return s ? JSON.parse(s) : null; } catch { return null; } });")
@@ -96,6 +75,11 @@ const repairLoadDataPlugin = {
     if (!code.includes('const loadData = async () =>')) transformed = transformed.replace(marker, loadData + googleAuth + marker)
     else transformed = transformed.replace(marker, googleAuth + marker)
     transformed = transformed.replace(/\n      \{showSwitchModal && \([\s\S]*?\n      \)\}\n\n      \{\/\* 🛡️ ADMIN PASSWORD MODAL \*\/\}/, "\n      {/* 🛡️ ADMIN PASSWORD MODAL */}")
+
+    // Remove description/tagline text from sport cards while preserving the data for other views.
+    transformed = transformed.replace(/\{sport\.description\}/g, '')
+    transformed = transformed.replace(/\{sport\.tagline\}/g, '')
+
     return { code: transformed, map: null }
   }
 }
