@@ -1,0 +1,12 @@
+{
+  "name": "gameopedia-sports-signup-portal",
+  "version": "1.0.0",
+  "description": "Gameopedia Office Sports Signup & Management Portal",
+  "private": true,
+  "scripts": {
+    "install:all": "npm install --prefix server && npm install --prefix client",
+    "build": "npm run build --prefix client",
+    "start": "node server/index.js",
+    "postinstall": "npm install --prefix server && npm install --prefix client && npm run build --prefix client"
+  }
+}
