@@ -1,4 +1,4 @@
-const SHEETS_WEBHOOK_URL = 'https://script.google.com/a/macros/gameopedia.com/s/AKfycbwJ7xL42MIMIl5YCSqvt8iIrxSCH0XW7ZK5NYlbiRnA4mKXXFFdctNeqzAJeJAJMh3AGA/exec';
+const SHEETS_WEBHOOK_URL = 'https://script.google.com/a/macros/gameopedia.com/s/AKfycbzwlFHqUNxKEahhom7CMdSeAM9_d--DCFm3SOA4gvRXNqZpei_VLUSaaZgWiF-Pe5tIbg/exec';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
@@ -34,8 +34,6 @@ async function syncToSheets(pathname, body) {
       email: body.email || ''
     };
 
-    // text/plain avoids a CORS preflight. The Apps Script remains restricted
-    // to Gameopedia users; the browser supplies the user's Google session.
     await fetch(SHEETS_WEBHOOK_URL, {
       method: 'POST',
       mode: 'no-cors',
@@ -44,6 +42,6 @@ async function syncToSheets(pathname, body) {
       body: JSON.stringify(payload)
     });
   } catch (_) {
-    // Sheets sync is deliberately non-blocking and must never slow down signup.
+    // Sheets sync is non-blocking.
   }
 }
