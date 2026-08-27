@@ -182,3 +182,8 @@
     border-right-color: var(--border);
   }
 }
+
+/* Hide the bottom-right transient toast notifications. */
+.fixed.bottom-6.right-6.z-50 {
+  display: none !important;
+}
